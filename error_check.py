@@ -7,26 +7,13 @@ def check_errors(alice_key, bob_key, sample_fraction=0.2, threshold=0.11, log=Fa
     """
     Estimate the Quantum Bit Error Rate (QBER) between Alice and Bob's keys.
     Detects possible eavesdropping if QBER exceeds threshold.
-    
-    Args:
-        alice_key (list[int]): Bits from Alice.
-        bob_key (list[int]): Bits from Bob.
-        sample_fraction (float): Fraction of bits used for QBER estimation.
-        threshold (float): Detection threshold for eavesdropping.
-        log (bool): Save results to log file if True.
-        visualize (bool): Plot error sample histogram if True.
-    
-    Returns:
-        dict: {
-            "qber": float,
-            "errors": int,
-            "sample_size": int,
-            "eve_detected": bool
-        }
+    Returns dictionary with keys:
+      "qber", "errors", "sample_size", "eve_detected", "alice_final_key", "bob_final_key"
     """
     if not alice_key or not bob_key:
         print("❌ Empty key(s). Cannot perform error check.")
-        return {"qber": 0.0, "errors": 0, "sample_size": 0, "eve_detected": False}
+        return {"qber": 0.0, "errors": 0, "sample_size": 0, "eve_detected": False,
+                "alice_final_key": [], "bob_final_key": []}
 
     if len(alice_key) != len(bob_key):
         print("⚠️ Warning: Key lengths differ. Truncating to shortest.")
@@ -54,13 +41,18 @@ def check_errors(alice_key, bob_key, sample_fraction=0.2, threshold=0.11, log=Fa
     else:
         print("✅ Secure channel → No significant eavesdropping detected.")
 
+    # remove tested bits (the ones in sample_indices) to produce final keys
+    tested_set = set(sample_indices.tolist()) if hasattr(sample_indices, "tolist") else set(sample_indices)
+    final_alice_key = [alice_key[i] for i in range(key_length) if i not in tested_set]
+    final_bob_key = [bob_key[i] for i in range(key_length) if i not in tested_set]
+
     if log:
         with open("qber_log.txt", "a") as f:
             f.write(f"{datetime.now()} | QBER={qber:.4f}, Errors={errors}, Eve={eve_detected}\n")
 
     if visualize:
         plt.figure(figsize=(6, 4))
-        plt.bar(["Errors", "Correct"], [errors, sample_size - errors], color=["red", "green"])
+        plt.bar(["Errors", "Correct"], [errors, sample_size - errors])
         plt.title(f"QBER Visualization ({qber*100:.2f}%)")
         plt.ylabel("Count")
         plt.tight_layout()
@@ -68,10 +60,13 @@ def check_errors(alice_key, bob_key, sample_fraction=0.2, threshold=0.11, log=Fa
 
     return {
         "qber": qber,
-        "errors": errors,
-        "sample_size": sample_size,
-        "eve_detected": eve_detected
+        "errors": int(errors),
+        "sample_size": int(sample_size),
+        "eve_detected": bool(eve_detected),
+        "alice_final_key": final_alice_key,
+        "bob_final_key": final_bob_key
     }
+
 
 def calibrate_threshold(noise_trials=100, noise_level=0.02):
     """
