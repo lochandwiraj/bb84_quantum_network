@@ -1,57 +1,37 @@
-# bb84_core.py — Core BB84 Protocol Implementation
+# bb84_core.py
+# Core BB84 protocol simulation (no real quantum backend)
+
 import numpy as np
 
-def create_bb84_circuit(num_qubits):
-    """
-    Alice preparation helper: generate random bits and bases.
-    Returns (alice_bits, alice_bases) as Python lists.
-    """
-    alice_bits = np.random.randint(0, 2, num_qubits)
-    alice_bases = np.random.randint(0, 2, num_qubits)
-    return alice_bits.tolist(), alice_bases.tolist()
+def create_bb84_circuit(alice_bits, alice_bases, bob_bases, n_qubits):
+    """Simulate quantum measurement results."""
+    results = np.zeros(n_qubits, dtype=int)
+    for i in range(n_qubits):
+        if alice_bases[i] == bob_bases[i]:
+            results[i] = alice_bits[i]
+        else:
+            results[i] = np.random.randint(0, 2)
+    return results
 
 
 def sift_key(alice_bits, alice_bases, bob_bases, bob_results):
-    """
-    Sift keys: return (alice_key, bob_key, matching_indices)
-    """
-    matching_indices = [i for i in range(len(alice_bases)) if alice_bases[i] == bob_bases[i]]
-    alice_key = [alice_bits[i] for i in matching_indices]
-    bob_key = [bob_results[i] for i in matching_indices]
-    return alice_key, bob_key, matching_indices
+    """Sift the keys based on matching bases."""
+    mask = alice_bases == bob_bases
+    alice_key = alice_bits[mask]
+    bob_key = bob_results[mask]
+    print(f"✓ Key sifting: {len(alice_key)} matching bases found")
+    return alice_key, bob_key
 
 
-def simulate_transmission_with_eve(
-    alice_bits,
-    alice_bases,
-    bob_bases,
-    with_eve=False,
-    intercept_rate=0.0
-):
-    """
-    Simulate transmission from Alice -> Bob (classical probabilistic model).
-    - If with_eve True: Eve intercepts each qubit with probability intercept_rate,
-      measures in a random basis, possibly collapses and resends.
-    - Returns: bob_results (list of 0/1)
-    """
-    bob_results = []
-    num_qubits = len(alice_bits)
-
-    for i in range(num_qubits):
-        bit = alice_bits[i]
-        base = alice_bases[i]
-
-        # Eve intercepts some qubits
-        if with_eve and np.random.rand() < intercept_rate:
-            eve_basis = np.random.randint(0, 2)
-            # if eve_basis == alice_basis: measured bit preserved; else random
-            measured_bit = bit if eve_basis == base else np.random.randint(0, 2)
-            # Eve re-sends measured_bit encoded in her basis
-            bit = measured_bit
-            base = eve_basis
-
-        # Bob measures: if bases match -> get bit; else random
-        bob_bit = bit if bob_bases[i] == base else np.random.randint(0, 2)
-        bob_results.append(bob_bit)
-
-    return bob_results
+def eve_intercept(alice_bits, alice_bases, intercept_rate=0.5):
+    """Simulate Eve intercepting and disturbing some qubits."""
+    n_qubits = len(alice_bits)
+    eve_bases = np.random.randint(0, 2, n_qubits)
+    corrupted = np.copy(alice_bits)
+    n_intercept = int(intercept_rate * n_qubits)
+    attack_indices = np.random.choice(range(n_qubits), n_intercept, replace=False)
+    for i in attack_indices:
+        if alice_bases[i] != eve_bases[i]:
+            corrupted[i] = np.random.randint(0, 2)
+    print(f"⚠️  Eve intercepted {n_intercept} qubits")
+    return corrupted
