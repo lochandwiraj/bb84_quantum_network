@@ -24,7 +24,7 @@ def check_errors(alice_key, bob_key, sample_fraction=0.2, threshold=0.11, log=Fa
     sample_size = max(1, int(sample_fraction * key_length))
     sample_indices = np.random.choice(key_length, sample_size, replace=False)
 
-    errors = np.sum([alice_key[i] != bob_key[i] for i in sample_indices])
+    errors = int(np.sum([alice_key[i] != bob_key[i] for i in sample_indices]))
     qber = errors / sample_size
     eve_detected = qber > threshold
 
@@ -60,8 +60,8 @@ def check_errors(alice_key, bob_key, sample_fraction=0.2, threshold=0.11, log=Fa
 
     return {
         "qber": qber,
-        "errors": int(errors),
-        "sample_size": int(sample_size),
+        "errors": errors,
+        "sample_size": sample_size,
         "eve_detected": bool(eve_detected),
         "alice_final_key": final_alice_key,
         "bob_final_key": final_bob_key
