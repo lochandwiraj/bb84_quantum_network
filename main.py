@@ -3,14 +3,24 @@ import numpy as np
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import Aer
 from alice import alice_prepare_qubits
+from error_check import check_errors
 
+
+# ------------------------------------------------------------
+#  Bob’s Measurement System (Hour 3)
+# ------------------------------------------------------------
 def bob_measure_qubits(num_qubits):
-    """Return list of 0/1 bases (0=Z,1=X)"""
+    """Bob randomly chooses measurement bases (0 = Z, 1 = X)."""
     return np.random.randint(0, 2, num_qubits).tolist()
 
+
+# ------------------------------------------------------------
+#  Quantum Transmission (Hour 4)
+# ------------------------------------------------------------
 def create_bb84_circuit(alice_bits, alice_bases, bob_bases, num_qubits):
     """
     Simulate BB84 transmission qubit-by-qubit using Aer simulator (shots=1 each).
+    Includes optional Eve interception to simulate eavesdropping.
     Returns list of measured bits by Bob.
     """
     simulator = Aer.get_backend('aer_simulator')
@@ -19,27 +29,45 @@ def create_bb84_circuit(alice_bits, alice_bases, bob_bases, num_qubits):
     for i in range(num_qubits):
         qc = QuantumCircuit(1, 1)
 
-        # Alice encodes bit
+        # --- Alice encodes her qubit ---
         if alice_bits[i] == 1:
             qc.x(0)
         if alice_bases[i] == 1:
             qc.h(0)
 
-        # Bob measures in his chosen basis
+        # --- Eve interception simulation (10% chance) ---
+        if np.random.rand() < 0.10:  # 10% chance Eve interferes
+            eve_basis = np.random.randint(0, 2)
+            if eve_basis == 1:
+                qc.h(0)
+            qc.measure(0, 0)
+            qc.reset(0)
+            # re-prepare disturbed qubit for Bob
+            if alice_bits[i] == 1:
+                qc.x(0)
+            if alice_bases[i] == 1:
+                qc.h(0)
+
+        # --- Bob’s measurement ---
         if bob_bases[i] == 1:
             qc.h(0)
-
         qc.measure(0, 0)
 
         compiled = transpile(qc, simulator)
         job = simulator.run(compiled, shots=1)
         out = job.result().get_counts(compiled)
-        # counts is like {'0':1} or {'1':1}
-        measured_bit = int(max(out, key=out.get))
+
+        # Some outputs may look like '0 1' — take the last bit safely
+        measured_str = max(out, key=out.get)
+        measured_bit = int(measured_str[-1])
         results.append(measured_bit)
 
     return results
 
+
+# ------------------------------------------------------------
+#  Key Sifting (Hour 5)
+# ------------------------------------------------------------
 def sift_key(alice_bits, alice_bases, bob_bases, bob_results):
     """
     Keep only positions where bases matched.
@@ -57,37 +85,55 @@ def sift_key(alice_bits, alice_bases, bob_bases, bob_results):
 
     return alice_key, bob_key, matching_indices
 
+
+# ------------------------------------------------------------
+#  Main BB84 Protocol (Hours 1–6)
+# ------------------------------------------------------------
 if __name__ == "__main__":
-    # PARAMETERS
     num_qubits = 100
 
-    # 1) Alice prepares
+    # 1. Alice prepares qubits
     alice_bits, alice_bases = alice_prepare_qubits(num_qubits)
 
-    # 2) Bob chooses bases
+    # 2. Bob randomly selects bases
     bob_bases = bob_measure_qubits(num_qubits)
 
-    # 3) Simulate quantum transmission (Bob's measurement results)
+    # 3. Simulate transmission with optional Eve interference
     bob_results = create_bb84_circuit(alice_bits, alice_bases, bob_bases, num_qubits)
 
-    # 4) Sift key (keep only matching-basis positions)
+    # 4. Perform key sifting
     alice_key, bob_key, matching_indices = sift_key(
         alice_bits, alice_bases, bob_bases, bob_results
     )
 
-    # 5) Print results
-    print("\n" + "="*50)
+    # 5. Show sifting results
+    print("\n" + "=" * 50)
     print("SIFTING RESULTS")
-    print("="*50)
+    print("=" * 50)
     print(f"Total qubits sent: {num_qubits}")
     print(f"Bases matched at: {len(matching_indices)} positions")
     print(f"Sifting efficiency: {len(matching_indices)/num_qubits*100:.1f}%\n")
-    print(f"Alice's sifted key (first 32 bits): {alice_key[:32]}  ({len(alice_key)} bits total)")
-    print(f"Bob's   sifted key (first 32 bits): {bob_key[:32]}  ({len(bob_key)} bits total)\n")
+    print(f"Alice's sifted key (first 32 bits): {alice_key[:32]} ({len(alice_key)} bits total)")
+    print(f"Bob's   sifted key (first 32 bits): {bob_key[:32]} ({len(bob_key)} bits total)\n")
 
-    keys_match = (alice_key == bob_key)
-    print(f"✅ Keys identical: {keys_match}")
+    # 6) Error checking (Eavesdrop detection)
+qber, eve_detected = check_errors(alice_key, bob_key)
 
-    if not keys_match:
-        differences = sum(a != b for a, b in zip(alice_key, bob_key))
-        print(f"⚠️ Differences found: {differences}/{len(alice_key)} bits")
+print("\n" + "="*50)
+print("ERROR CHECKING (QBER Estimation)")
+print("="*50)
+print(f"Quantum Bit Error Rate (QBER): {qber:.2f}%")
+
+if not eve_detected:
+    print("✅ Secure channel. No significant eavesdropping detected.")
+    final_key = alice_key
+    print(f"\n🔐 Final Secure Key (length {len(final_key)}): {final_key[:32]}")
+else:
+    print("🚫 Key discarded due to high error rate.")
+
+
+    # 7. If secure, show final key
+    if result['is_secure']:
+        print(f"\n🔐 Final Secure Key (first 32 bits): {result['alice_final_key'][:32]}")
+    else:
+        print("\n🚫 Key discarded — channel not secure.")
