@@ -1,73 +1,60 @@
-# network.py
-# Multi-party quantum network simulation with random eavesdropper
+import random
+from alice import Alice
+from bb84_core import generate_bases, measure, sift_keys
+from error_check import estimate_error_rate, is_secure
 
-import numpy as np
-from alice import prepare_qubits
-from bb84_core import create_bb84_circuit, sift_key, eve_intercept
-from error_check import check_errors
+def run_bb84_channel(n_qubits, eve_present=False, intercept_rate=0.5):
+    alice = Alice(n_qubits)
+    qubits = alice.send_qubits()
 
-def run_quantum_network_random(n_qubits=100, eve_intercept_rate=0.5):
-    """Run 3-party BB84 network with random eavesdropper."""
-    print("Running 3-party quantum network with random eavesdropper...\n")
-    print("==================================================")
-    print("QUANTUM NETWORK SIMULATION")
-    print("==================================================")
+    if eve_present:
+        intercepted = []
+        for bit, base in qubits:
+            if random.random() < intercept_rate:
+                eve_base = random.choice(['X', 'Z'])
+                eve_measured_bit = bit if base == eve_base else random.randint(0, 1)
+                intercepted.append((eve_measured_bit, eve_base))
+            else:
+                intercepted.append((bit, base))
+        qubits = intercepted
 
-    # Step 1: Alice prepares qubits
-    alice_bits, alice_bases = prepare_qubits(n_qubits)
+    receiver_bases = generate_bases(n_qubits)
+    measured_bits = measure(
+        [b for b, _ in qubits],
+        [base for _, base in qubits],
+        receiver_bases
+    )
 
-    # Step 2: Choose one random victim
+    sender_key, receiver_key = sift_keys(alice.bases, receiver_bases, alice.bits, measured_bits)
+    error_rate = estimate_error_rate(sender_key, receiver_key)
+
+    return {
+        "sender_key": sender_key,
+        "receiver_key": receiver_key,
+        "error": error_rate,
+        "secure": is_secure(error_rate)
+    }
+
+def run_quantum_network(n_qubits=100, intercept_rate=0.5):
     participants = ["Bob", "Charlie", "Dave"]
-    compromised = np.random.choice(participants)
-    print(f"\nEve will attempt to intercept on Alice → {compromised}.\n")
+    compromised_target = random.choice(participants)
+    print(f"\n🚨 Eve is attempting to intercept communication with: {compromised_target}")
 
     results = {}
-    for receiver in participants:
-        eve_active = receiver == compromised
+    link_status = {}
 
-        print("--------------------------------------------------")
-        print(f"SESSION: Alice → {receiver} {'(EVE)' if eve_active else '(CLEAN)'}")
-        print("--------------------------------------------------")
-
-        receiver_bases = np.random.randint(0, 2, n_qubits)
-
-        if eve_active:
-            transmitted_bits = eve_intercept(alice_bits, alice_bases, eve_intercept_rate)
-        else:
-            transmitted_bits = np.copy(alice_bits)
-
-        receiver_results = create_bb84_circuit(transmitted_bits, alice_bases, receiver_bases, n_qubits)
-        alice_key, receiver_key = sift_key(alice_bits, alice_bases, receiver_bases, receiver_results)
-        qber, secure = check_errors(alice_key, receiver_key)
-
-        results[receiver] = {
-            'error_rate': qber * 100,
-            'key_length': len(receiver_key),
-            'secure': secure,
-            'eve_active': eve_active
+    for person in participants:
+        eve_present = (person == compromised_target)
+        result = run_bb84_channel(n_qubits, eve_present, intercept_rate)
+        results[person] = result
+        link_status[f"alice_to_{person.lower()}"] = {
+            "error": result["error"],
+            "secure": result["secure"]
         }
 
-        print(f"{receiver} error rate: {qber*100:.2f}% | Key length: {len(receiver_key)} | {'✅ SECURE' if secure else '❌ COMPROMISED'}\n")
+    print("\n🔒 Quantum Network Status:")
+    for name, result in results.items():
+        status = "✅ Secure" if result["secure"] else "❌ Compromised"
+        print(f"  Alice ↔ {name}: {status} | Error rate = {result['error']:.2%}")
 
-    # Step 3: Compute summary
-    total_links = len(participants)
-    secure_links = sum(1 for r in results.values() if r['secure'])
-    compromised_links = total_links - secure_links
-
-    print("\n==================================================")
-    print("NETWORK SECURITY SUMMARY")
-    print("==================================================")
-    print(f"Total Links:        {total_links}")
-    print(f"Secure Links:       {secure_links} ({secure_links/total_links*100:.1f}%)")
-    print(f"Compromised Links:  {compromised_links} ({compromised_links/total_links*100:.1f}%)\n")
-
-    for r in participants:
-        status = "✅" if results[r]['secure'] else "❌"
-        print(f"Alice → {r:<8} {status}  {results[r]['error_rate']:.1f}% error")
-
-    attacked = [r for r, v in results.items() if v['eve_active']]
-    if attacked:
-        print(f"\n🚨 Eavesdropper was active on: Alice → {attacked[0]}")
-    print("==================================================")
-
-    return results
+    return {"link_status": link_status, "results": results}

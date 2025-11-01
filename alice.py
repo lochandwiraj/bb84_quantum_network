@@ -1,11 +1,9 @@
-# alice.py
-# Handles Alice's qubit preparation and communication setup
+from bb84_core import generate_bits, generate_bases
 
-import numpy as np
+class Alice:
+    def __init__(self, n_qubits):
+        self.bits = generate_bits(n_qubits)
+        self.bases = generate_bases(n_qubits)
 
-def prepare_qubits(n_qubits=100):
-    """Alice prepares random bits and random bases."""
-    bits = np.random.randint(0, 2, n_qubits)
-    bases = np.random.randint(0, 2, n_qubits)
-    print(f"\n✓ Alice prepared {n_qubits} qubits")
-    return bits, bases
+    def send_qubits(self):
+        return list(zip(self.bits, self.bases))
