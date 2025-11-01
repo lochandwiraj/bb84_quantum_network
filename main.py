@@ -1,5 +1,5 @@
 # ============================================================
-# main.py – BB84 Quantum Key Distribution with Eve Simulation
+# main.py – BB84 Quantum Key Distribution & Network Simulation
 # ============================================================
 
 import numpy as np
@@ -8,10 +8,10 @@ from qiskit import QuantumCircuit, transpile
 from qiskit_aer import Aer
 from alice import alice_prepare_qubits
 from error_check import check_errors
-
+from network import run_quantum_network  # ✅ safe import (no circular reference)
 
 # ------------------------------------------------------------
-#  Bob’s Measurement System (Hour 3)
+#  Bob’s Measurement System
 # ------------------------------------------------------------
 def bob_measure_qubits(num_qubits):
     """Bob randomly chooses measurement bases (0 = Z, 1 = X)."""
@@ -19,7 +19,7 @@ def bob_measure_qubits(num_qubits):
 
 
 # ------------------------------------------------------------
-#  Quantum Transmission (Hour 4)
+#  Quantum Transmission
 # ------------------------------------------------------------
 def create_bb84_circuit(alice_bits, alice_bases, bob_bases, num_qubits):
     """Simulate BB84 transmission qubit-by-qubit using Aer simulator."""
@@ -50,7 +50,7 @@ def create_bb84_circuit(alice_bits, alice_bases, bob_bases, num_qubits):
 
 
 # ------------------------------------------------------------
-#  Key Sifting (Hour 5)
+#  Key Sifting
 # ------------------------------------------------------------
 def sift_key(alice_bits, alice_bases, bob_bases, bob_results):
     """Keep only positions where bases matched."""
@@ -66,7 +66,7 @@ def sift_key(alice_bits, alice_bases, bob_bases, bob_results):
 
 
 # ------------------------------------------------------------
-#  Eve’s Quantum Eavesdropping (Hour 7)
+#  Eve’s Quantum Eavesdropping
 # ------------------------------------------------------------
 def simulate_transmission_with_eve(alice_bits, alice_bases, bob_bases, with_eve=False, intercept_rate=0.5):
     """
@@ -95,7 +95,7 @@ def simulate_transmission_with_eve(alice_bits, alice_bases, bob_bases, with_eve=
             if eve_basis == 1:
                 qc.h(0)
             qc.measure(0, 0)
-            qc.reset(0)  # collapse the state
+            qc.reset(0)
 
             # Eve re-sends a possibly wrong qubit
             if random.random() < 0.5:
@@ -119,7 +119,7 @@ def simulate_transmission_with_eve(alice_bits, alice_bases, bob_bases, with_eve=
 
 
 # ------------------------------------------------------------
-#  Unified BB84 Runner (Hour 8 wrapper)
+#  Unified BB84 Runner
 # ------------------------------------------------------------
 def run_bb84_protocol(n_qubits=100, with_eve=False, intercept_rate=0.5):
     """
@@ -145,21 +145,13 @@ def run_bb84_protocol(n_qubits=100, with_eve=False, intercept_rate=0.5):
     print("✓ Quantum transmission complete")
 
     # 4) Key sifting
-    alice_key, bob_key, matching_indices = sift_key(alice_bits, alice_bases, bob_bases, bob_results)
+    alice_key, bob_key, _ = sift_key(alice_bits, alice_bases, bob_bases, bob_results)
     print(f"✓ Key sifting: {len(alice_key)} matching bases found")
 
     # 5) Error checking
     if len(alice_key) == 0:
         print("⚠️ No sifted bits — aborting.")
-        return {
-            'error_rate': 1.0,
-            'key_length': 0,
-            'secure': False,
-            'initial_qubits': n_qubits,
-            'sifted_bits': 0,
-            'alice_key': [],
-            'bob_key': []
-        }
+        return {'error_rate': 1.0, 'key_length': 0, 'secure': False}
 
     check_result = check_errors(alice_key, bob_key)
     qber = check_result["qber"]
@@ -173,33 +165,28 @@ def run_bb84_protocol(n_qubits=100, with_eve=False, intercept_rate=0.5):
     print(f"Security Status: {'✅ SECURE' if secure else '❌ COMPROMISED'}")
     print("="*50 + "\n")
 
-    return {
-        'error_rate': qber,
-        'key_length': len(alice_key),
-        'secure': secure,
-        'initial_qubits': n_qubits,
-        'sifted_bits': len(alice_key),
-        'alice_key': alice_key,
-        'bob_key': bob_key
-    }
+    return {'error_rate': qber, 'key_length': len(alice_key), 'secure': secure}
 
 
 # ------------------------------------------------------------
-#  Automated Tests (Hour 8 master run)
+#  Master Test Suite
 # ------------------------------------------------------------
 if __name__ == "__main__":
-    print("\n" + "🔐"*10)
-    print("BB84 PROTOCOL MASTER RUN")
-    print("🔐"*10)
+    print("\n🔐 BB84 PROTOCOL MASTER RUN 🔐")
 
-    # Test 1: Secure channel (no Eve)
-    print("\n\n TEST 1: SECURE CHANNEL (NO EAVESDROPPER)")
-    result1 = run_bb84_protocol(100, with_eve=False)
+    # --- Test 1: Secure channel (no Eve)
+    print("\n TEST 1: SECURE CHANNEL (NO EAVESDROPPER)")
+    run_bb84_protocol(100, with_eve=False)
 
-    # Test 2: With Eve (50% intercept)
-    print("\n\n TEST 2: WITH EAVESDROPPER (50% INTERCEPT)")
-    result2 = run_bb84_protocol(100, with_eve=True, intercept_rate=0.5)
+    # --- Test 2: With Eve (50% intercept)
+    print("\n TEST 2: WITH EAVESDROPPER (50% INTERCEPT)")
+    run_bb84_protocol(100, with_eve=True, intercept_rate=0.5)
 
-    # Test 3: Stealth Eve (10% intercept)
-    print("\n\n TEST 3: STEALTH EAVESDROPPER (10% INTERCEPT)")
-    result3 = run_bb84_protocol(100, with_eve=True, intercept_rate=0.1)
+    # --- Test 3: Stealth Eve (10% intercept)
+    print("\n TEST 3: STEALTH EAVESDROPPER (10% INTERCEPT)")
+    run_bb84_protocol(100, with_eve=True, intercept_rate=0.1)
+
+    # --- Hour 9: Network Simulation ---
+    print("\n=== NETWORK TEST ===")
+    net_res = run_quantum_network(num_qubits=100, eve_intercept_rate=0.5)
+    print("\nNetwork summary:", net_res['security_percentage'], "% secure")
