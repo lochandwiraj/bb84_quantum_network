@@ -240,7 +240,9 @@ def print_network_summary(results):
     print("\n╔═══════════════════════════════════════════════╗")
     print("║       QUANTUM NETWORK SECURITY REPORT         ║")
     print("╠═══════════════════════════════════════════════╣")
-    print(f"║ Scenario: {results['attack_scenario'][:30]:<30} ║")
+    
+    scenario_display = results['attack_scenario'].replace('_', ' ').title()[:30]
+    print(f"║ Scenario: {scenario_display:<30} ║")
     print(f"║ Total Links:         {results['total_links']}                        ║")
     print(f"║ Secure Links:        {results['secure_links']} ({results['security_percentage']:>5.1f}%)              ║")
     print(f"║ Compromised Links:   {results['compromised_links']} ({100-results['security_percentage']:>5.1f}%)              ║")
@@ -248,26 +250,37 @@ def print_network_summary(results):
     if results['num_attackers'] > 0:
         print(f"║ Active Attackers:    {results['num_attackers']}                        ║")
         print("║                                               ║")
-        print("║ Attacker(s): " + ", ".join(results['attacker_names'][:2])[:30].ljust(30) + " ║")
+        attacker_display = ", ".join(results['attacker_names'][:3])[:30].ljust(30)
+        print(f"║ Attacker(s): {attacker_display} ║")
     
     print("╠═══════════════════════════════════════════════╣")
     print("║              INDIVIDUAL LINKS                 ║")
     print("╠═══════════════════════════════════════════════╣")
     
-    # Print individual link status
+    # Print individual link status - TEXT ONLY, NO UNICODE
     for link_name, status in results['link_status'].items():
-        participant = link_name.split('_')[-1].replace('_r', '_R').capitalize()
+        # Extract receiver name properly
+        receiver_part = link_name.replace('alice_to_', '')
+        if receiver_part == 'eve_r':
+            participant = 'Eve_R'
+        else:
+            participant = receiver_part.capitalize()
+        
         error_pct = status['error'] * 100
-        symbol = "✅" if status['secure'] else "❌"
+        symbol = "[OK]" if status['secure'] else "[XX]"
         
         # Format link name
-        link_str = f"Alice → {participant}:"
+        link_str = f"Alice -> {participant}:"
         
         if status['attacker']:
-            attacker_str = f"[{status['attacker'][:12]}]"
-            print(f"║ {link_str:<18} {symbol} {error_pct:>5.1f}% {attacker_str:<15} ║")
+            # Truncate long attacker names
+            attacker_display = status['attacker'][:15]
+            if len(status['attacker']) > 15:
+                attacker_display += "..."
+            attacker_str = f"[{attacker_display}]"
+            print(f"║ {link_str:<18} {symbol} {error_pct:>5.1f}% {attacker_str:<20} ║")
         else:
-            print(f"║ {link_str:<18} {symbol} {error_pct:>5.1f}% [Secure]        ║")
+            print(f"║ {link_str:<18} {symbol} {error_pct:>5.1f}% [Secure]            ║")
     
     print("╚═══════════════════════════════════════════════╝\n")
 
