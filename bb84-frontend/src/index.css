@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom global styles (Tailwind-safe) */
+body {
+  @apply bg-gradient-to-br from-indigo-600 to-purple-700 text-white min-h-screen font-sans;
+}

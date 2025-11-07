@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BB84 Visual Simulator — Interactive</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg1:#6b46c1; --bg2:#9f7aea; --card:#6d28d9bb; --panel:#ffffffdf;
+    --success:#10b981; --danger:#ef4444; --accent:#f59e0b; --muted:#94a3b8;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;
+    background: linear-gradient(135deg,var(--bg1),var(--bg2));
+    min-height:100vh; color:#0f172a;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  header{
+    color:#fff; text-align:center; padding:36px 20px 10px;
+  }
+  header h1{font-family:Orbitron,monospace; font-size:34px; margin:0 0 6px}
+  header p{opacity:0.95; margin:0 0 18px}
+
+  .wrap{max-width:1200px; margin:20px auto; padding:20px;}
+  .panel{
+    display:flex; gap:20px;
+  }
+
+  .controls{
+    width:340px; background: rgba(255,255,255,0.06); padding:20px; border-radius:14px;
+    border: 1px solid rgba(255,255,255,0.06); color:white;
+  }
+  .controls h3{margin:0 0 8px; font-size:20px}
+  label{display:block; font-size:13px; margin:18px 0 8px; color:#fff9}
+  .range-row{display:flex; align-items:center; gap:14px}
+  .range-row input[type=range]{flex:1}
+  .small{font-size:13px; color:#fff8}
+
+  input[type=number], select {width:100%; padding:10px; border-radius:8px; border:none; font-size:15px}
+  button{margin-top:18px; padding:12px 14px; border-radius:12px; background:linear-gradient(90deg,#7c3aed,#5b21b6); color:white; border:none; cursor:pointer; font-weight:700}
+  button.secondary{background:transparent; border:1px solid rgba(255,255,255,0.15)}
+
+  /* main display */
+  .display{
+    flex:1; padding:20px;
+  }
+  .card{
+    background: rgba(255,255,255,0.06); padding:22px; border-radius:14px; border:1px solid rgba(255,255,255,0.06);
+    color:white; min-height:420px;
+  }
+
+  .status{margin:10px 0 18px; padding:12px 14px; border-radius:10px; background:rgba(255,255,255,0.02); color:#d1fae5}
+  .svgwrap{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:10px; padding:18px; margin-top:14px; display:flex; justify-content:center; align-items:center}
+  svg{width:820px; height:340px; overflow:visible}
+
+  .legend{display:flex; gap:12px; margin-top:12px; color:#fff9; font-size:13px}
+  .legend .item{display:flex; gap:8px; align-items:center}
+  .dot{width:14px;height:14px;border-radius:99px}
+
+  pre.output{margin-top:16px; background:#0b1220; color:#cbd5e1; padding:14px; border-radius:10px; overflow:auto; max-height:220px}
+
+  /* labels */
+  .node-label{font-weight:700; font-size:13px}
+  .node-sub{font-size:12px; opacity:0.8; margin-top:6px}
+  /* line animation */
+  .link{transition:stroke 300ms, stroke-width 300ms, opacity 300ms}
+  .node-circle{transition:transform 250ms}
+  .node-circle:hover{transform:scale(1.06)}
+  @media (max-width:980px){
+    .panel{flex-direction:column}
+    .controls{width:100%}
+    .svgwrap svg{width:100%; height:320px}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🔐 BB84 Quantum Network</h1>
+    <p style="opacity:.95">Interactive visual simulator — pick attack type, intercept %, qubits and simulate</p>
+  </header>
+
+  <div class="wrap">
+    <div class="panel">
+      <aside class="controls card" role="region" aria-label="controls">
+        <h3>Simulation Controls</h3>
+
+        <label>Qubits: <span id="qval">10</span></label>
+        <div class="range-row">
+          <input id="qubits" type="range" min="0" max="20" value="10">
+        </div>
+
+        <label>Attack type</label>
+        <select id="attackType">
+          <option value="no_attack">No Attack</option>
+          <option value="single_single">Single → Single</option>
+          <option value="single_multiple">Single → Multiple</option>
+          <option value="multiple_single">Multiple → Single</option>
+          <option value="multiple_multiple">Multiple → Multiple</option>
+        </select>
+
+        <label>Number of attackers</label>
+        <input id="nattack" type="number" min="0" max="12" value="2">
+
+        <label>Intercept %: <strong id="intPct">50%</strong></label>
+        <div class="range-row">
+          <input id="intercept" type="range" min="0" max="100" value="50">
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:14px">
+          <button id="simulateBtn">🔬 Simulate</button>
+          <button id="resetBtn" class="secondary">Reset</button>
+        </div>
+
+        <div style="margin-top:16px; font-size:13px; color:#fff7;">
+          Tip: change the intercept % and click <strong>Simulate</strong>. At 0% attacks never succeed. At 100% attacks always succeed.
+        </div>
+      </aside>
+
+      <main class="display">
+        <div class="card">
+          <div id="status" class="status">Ready. Choose parameters and click Simulate.</div>
+
+          <div class="svgwrap">
+            <!-- SVG visual -->
+            <svg id="viz" viewBox="0 0 820 340" xmlns="http://www.w3.org/2000/svg" aria-label="network visualization">
+              <!-- Links will be inserted here -->
+              <g id="links"></g>
+
+              <!-- Nodes -->
+              <!-- Alice left -->
+              <g id="alice" transform="translate(120,170)">
+                <circle class="node-circle" r="28" fill="#2563eb" stroke="#0b1220" stroke-width="3"></circle>
+                <text x="0" y="5" text-anchor="middle" fill="#fff" class="node-label">A</text>
+                <text x="0" y="36" text-anchor="middle" fill="#f3f4f6" class="node-sub">Alice (Sender)</text>
+              </g>
+
+              <!-- Receivers block (right) -->
+              <g id="receivers" transform="translate(620,40)"></g>
+
+              <!-- Attackers block (top-center) -->
+              <g id="attackers" transform="translate(380,30)"></g>
+            </svg>
+          </div>
+
+          <div class="legend" aria-hidden="true">
+            <div class="item"><span class="dot" style="background:var(--success)"></span> Secure link</div>
+            <div class="item"><span class="dot" style="background:var(--danger)"></span> Compromised link</div>
+            <div class="item"><span class="dot" style="background:orange"></span> Attacker attempt</div>
+          </div>
+
+          <pre id="result" class="output" aria-live="polite">{ "status":"idle" }</pre>
+        </div>
+      </main>
+    </div>
+  </div>
+
+<script>
+  // DOM refs
+  const qubits = document.getElementById('qubits');
+  const qval = document.getElementById('qval');
+  const intercept = document.getElementById('intercept');
+  const intPct = document.getElementById('intPct');
+  const nattack = document.getElementById('nattack');
+  const attackType = document.getElementById('attackType');
+  const simulateBtn = document.getElementById('simulateBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const linksGroup = document.getElementById('links');
+  const receiversGroup = document.getElementById('receivers');
+  const attackersGroup = document.getElementById('attackers');
+  const resultPre = document.getElementById('result');
+  const statusBar = document.getElementById('status');
+
+  // initial receivers names
+  const receiverNames = ['Bob','Charlie','Dave','Eve_R','Frank']; // can vary
+  const RECEIVER_COUNT = receiverNames.length;
+
+  qval.textContent = qubits.value;
+  intPct.textContent = intercept.value + '%';
+
+  qubits.addEventListener('input', ()=> qval.textContent = qubits.value);
+  intercept.addEventListener('input', ()=> intPct.textContent = intercept.value + '%');
+
+  // helper: create SVG elements
+  function $svg(tag, attrs={}) {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (let k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  // draw receivers and attackers containers
+  function renderStaticNodes() {
+    receiversGroup.innerHTML = '';
+    attackersGroup.innerHTML = '';
+
+    // Receivers vertical layout
+    const spacing = 60;
+    const startY = 0;
+    for (let i=0;i<RECEIVER_COUNT;i++){
+      const y = startY + i*spacing;
+      const g = $svg('g',{transform:`translate(0,${y})`, id:`rcv_${i}`});
+      const cx = 0;
+      const cy = 0;
+      const r = 24;
+      const circle = $svg('circle',{cx:cx, cy:cy, r:r, fill:'#10b981', stroke:'#081124', 'stroke-width':3, class:'node-circle'});
+      const label = $svg('text',{x:cx+36, y:cy+6, 'font-size':14, 'text-anchor':'start', fill:'#fff', class:'node-label'});
+      label.textContent = receiverNames[i] || (`R${i+1}`);
+      const sub = $svg('text',{x:cx+36, y:cy+24, 'font-size':12, fill:'#e6eef7', opacity:0.85});
+      sub.textContent = 'Receiver';
+      g.appendChild(circle); g.appendChild(label); g.appendChild(sub);
+      receiversGroup.appendChild(g);
+    }
+
+    // attackers (stack vertically centered near top)
+    // We'll leave attackersGroup empty; populate during simulate
+  }
+
+  renderStaticNodes();
+
+  // Simulate function
+  function simulate(){
+    // read controls
+    const nAtt = Math.max(0, Math.min(12, parseInt(nattack.value||0)));
+    const pct = Math.max(0, Math.min(100, parseInt(intercept.value||0)));
+    const nq = Math.max(0, Math.min(20, parseInt(qubits.value||0)));
+    const atype = attackType.value;
+
+    statusBar.textContent = `Simulating ${nq} qubits · attack type: ${atype} · ${nAtt} attacker(s) · intercept ${pct}%`;
+    // clear previous
+    linksGroup.innerHTML = '';
+    attackersGroup.innerHTML = '';
+
+    // place attackers stacked
+    const attackerPositions = [];
+    for (let i=0;i<nAtt;i++){
+      const x = 0;
+      const y = i*36;
+      attackerPositions.push({x,y});
+      const g = $svg('g',{transform:`translate(${0},${i*36})`, id:`atk_${i}`});
+      const circle = $svg('circle',{cx:0, cy:0, r:20, fill:'#ef4444', stroke:'#fff', 'stroke-width':2, class:'node-circle'});
+      const t = $svg('text',{x:0,y:6,'font-size':13,'text-anchor':'middle',fill:'#fff'});
+      t.textContent = 'E';
+      const label = $svg('text',{x:35,y:6,'font-size':12,fill:'#ffe7e7'});
+      label.textContent = `Attacker_${i+1}`;
+      g.appendChild(circle); g.appendChild(t); g.appendChild(label);
+      attackersGroup.appendChild(g);
+    }
+
+    // layout mapping positions (SVG coordinates)
+    // Alice center-left fixed from transform(120,170)
+    const alice = {x:120, y:170};
+    // receivers group transform translate(620,40) and each y spacing 60
+    const recBaseX = 620;
+    const recBaseY = 40;
+    const recSpacing = 60;
+    const receivers = [];
+    for (let i=0;i<RECEIVER_COUNT;i++){
+      receivers.push({name: receiverNames[i], x: recBaseX, y: recBaseY + i*recSpacing, idx:i});
+    }
+    // attackers top-center transform (380,30) with stack
+    const atkBaseX = 380;
+    const atkBaseY = 30;
+    const attackers = [];
+    for (let i=0;i<nAtt;i++){
+      attackers.push({id:i, x: atkBaseX, y: atkBaseY + i*36});
+    }
+
+    // Build candidate attack mapping according to attack type
+    // mapping: attackerIndex -> [receiverIndices it attempts]
+    const mapping = {};
+    for (let ai=0;ai<attackers.length;ai++) mapping[ai]=[];
+
+    if (atype === 'no_attack' || attackers.length===0){
+      // nothing
+    } else if (atype === 'single_single'){
+      // choose one attacker (random) and one receiver (random)
+      const ai = Math.floor(Math.random()*attackers.length);
+      const r = Math.floor(Math.random()*receivers.length);
+      mapping[ai].push(r);
+    } else if (atype === 'single_multiple'){
+      // choose one attacker attacks all receivers
+      const ai = Math.floor(Math.random()*attackers.length);
+      for (let r=0;r<receivers.length;r++) mapping[ai].push(r);
+    } else if (atype === 'multiple_single'){
+      // choose one receiver, all attackers attempt it
+      const r = Math.floor(Math.random()*receivers.length);
+      for (let ai=0; ai<attackers.length; ai++) mapping[ai].push(r);
+    } else if (atype === 'multiple_multiple'){
+      // each attacker picks 1..N random receivers (probabilistic)
+      for (let ai=0; ai<attackers.length; ai++){
+        for (let r=0; r<receivers.length; r++){
+          // 40% chance that attacker targets that receiver (so not all-to-all)
+          if (Math.random() < 0.4) mapping[ai].push(r);
+        }
+        // if none chosen, pick one
+        if (mapping[ai].length===0){
+          mapping[ai].push(Math.floor(Math.random()*receivers.length));
+        }
+      }
+    }
+
+    // For each receiver, we will compute if it's attacked (one or more successful attacks)
+    const receiverStatus = Array(receivers.length).fill(false); // compromised?
+    const linkRecords = []; // records to show in JSON
+
+    // Draw base Alice -> receiver links (these are the quantum links Alice->receiver)
+    for (let r=0;r<receivers.length;r++){
+      const rec = receivers[r];
+      // create base secure-green line, will be updated to red if compromised
+      const line = $svg('line', {
+        x1: alice.x, y1: alice.y, x2: rec.x-14, y2: rec.y, stroke: '#10b981', 'stroke-width': 4, class: 'link'
+      });
+      linksGroup.appendChild(line);
+
+      // small label percentage placeholder
+      const pctLabel = $svg('text', {x: (alice.x + (rec.x-14))/2, y: (alice.y + rec.y)/2 - 10, 'font-size':12, 'text-anchor':'middle', fill:'#e6fff1'});
+      pctLabel.textContent = '0%';
+      linksGroup.appendChild(pctLabel);
+
+      // compute if any attacker attempts -> and whether attack succeeds
+      let attempts = [];
+      for (let ai=0; ai<attackers.length; ai++){
+        const targets = mapping[ai];
+        if (targets && targets.includes(r)){
+          // attacker ai attempts on receiver r — chance to succeed governed by pct
+          const roll = Math.random()*100;
+          const success = roll < (pct);
+          attempts.push({attacker:ai, success, roll});
+        }
+      }
+
+      // if there are attempts, draw attacker->receiver orange dashed lines
+      if (attempts.length>0){
+        // for each attempt draw thin orange line from attacker to receiver
+        attempts.forEach(at=>{
+          const atk = attackers[at.attacker];
+          // position attacker as placed earlier
+          const aX = atk.x, aY = atk.y;
+          const l = $svg('line', {x1: aX+12, y1: aY+6, x2: rec.x-18, y2: rec.y-6, stroke:'orange','stroke-width':3, 'stroke-dasharray':'6 6', opacity:0.95, class:'link'});
+          linksGroup.appendChild(l);
+
+          // small attacker label near the link
+          const midx = (aX+12 + (rec.x-18))/2;
+          const midy = (aY+6 + (rec.y-6))/2;
+          const lab = $svg('text',{x:midx,y:midy-8,'font-size':11,fill:'#ffdcb0','text-anchor':'middle'});
+          lab.textContent = `E${at.attacker+1}`;
+          linksGroup.appendChild(lab);
+        });
+      }
+
+      // Determine final: if any attempt success -> compromised
+      const anySuccess = attempts.some(a=>a.success);
+      receiverStatus[r] = anySuccess;
+
+      // update base link color
+      if (anySuccess){
+        line.setAttribute('stroke', '#ef4444');
+        line.setAttribute('stroke-width','5');
+        pctLabel.textContent = 'COMPROMISED';
+        pctLabel.setAttribute('fill','#ffd3d3');
+      } else if (attempts.length>0){
+        // attacks attempted but none succeeded -> mark as suspicious (orange tint)
+        line.setAttribute('stroke','#f59e0b'); // orange
+        pctLabel.textContent = 'ATTEMPTED';
+        pctLabel.setAttribute('fill','#fff3db');
+      } else {
+        // clean
+        line.setAttribute('stroke','#10b981');
+        pctLabel.textContent = 'SECURE';
+        pctLabel.setAttribute('fill','#e6fff1');
+      }
+
+      // record statistics
+      linkRecords.push({
+        receiver: receivers[r].name,
+        attempts: attempts.map(a=>({attacker:`Attacker_${a.attacker+1}`, success:a.success, roll: +a.roll.toFixed(1)})),
+        compromised: anySuccess
+      });
+    }
+
+    // animate attackers and label placements: reposition attackersGroup g elements to actual attacker coords
+    // attackersGroup was filled earlier with circles at relative (0, i*36)
+    // we want to move attackersGroup children to absolute coords as well (put them in same coordinate system)
+    // simple: remove attackersGroup content and add positioned groups again (we already displayed them in attackersGroup with transform)
+    // Now also draw small curved connecting lines from Alice to each attacker (visual)
+    for (let ai=0; ai<attackers.length; ai++){
+      const atk = attackers[ai];
+      // small curved path from Alice to attacker if we want
+      const path = $svg('path', {d: `M ${alice.x+30} ${alice.y} Q ${ (alice.x+atk.x)/2 } ${alice.y-80} ${atk.x} ${atk.y+6}`, stroke:'#7c3aed', 'stroke-width':2, fill:'none', opacity:0.5});
+      linksGroup.appendChild(path);
+    }
+
+    // Build summary JSON
+    const summary = {
+      qubits: nq,
+      intercept_pct: pct,
+      attack_type: atype,
+      n_attackers: attackers.length,
+      results: linkRecords,
+      compromised_count: linkRecords.filter(r=>r.compromised).length,
+      timestamp: Date.now()
+    };
+
+    resultPre.textContent = JSON.stringify(summary, null, 2);
+    // status bar
+    statusBar.textContent = `Simulation complete — compromised: ${summary.compromised_count} / ${receivers.length}`;
+  }
+
+  simulateBtn.addEventListener('click', () => {
+    simulateBtn.disabled = true;
+    simulateBtn.textContent = 'Running...';
+    // slight delay to mimic processing and allow UI to update
+    setTimeout(()=>{
+      try {
+        simulate();
+      } catch(e){
+        console.error(e);
+      } finally {
+        simulateBtn.disabled = false;
+        simulateBtn.textContent = '🔬 Simulate';
+      }
+    }, 180);
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    // reset to defaults
+    qubits.value = 10; qval.textContent = '10';
+    intercept.value = 50; intPct.textContent = '50%';
+    nattack.value = 2;
+    attackType.value = 'single_multiple';
+    linksGroup.innerHTML = '';
+    attackersGroup.innerHTML = '';
+    resultPre.textContent = '{ "status":"idle" }';
+    statusBar.textContent = 'Ready. Choose parameters and click Simulate.';
+  });
+
+  // initial render small demo
+  (function initDemo(){
+    // initial sample attackers icons so layout looks nice
+    renderStaticNodes();
+    // draw a simple base Alice->first receiver
+    linksGroup.innerHTML='';
+    const alice = {x:120,y:170};
+    const rec = {x:620,y:40};
+    const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1', alice.x); l.setAttribute('y1', alice.y);
+    l.setAttribute('x2', rec.x-18); l.setAttribute('y2', rec.y);
+    l.setAttribute('stroke','#10b981'); l.setAttribute('stroke-width',4); l.classList.add('link');
+    linksGroup.appendChild(l);
+  })();
+
+</script>
+</body>
+</html>

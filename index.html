@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BB84 Quantum Network — Visuals</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(135deg,#667eea,#764ba2);color:#111}
+  .app{max-width:1200px;margin:28px auto;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+  header{padding:28px;text-align:center;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+  main{display:flex}
+  .panel{width:320px;padding:20px;background:#f8fafc;border-right:1px solid #eee}
+  .content{flex:1;padding:20px}
+  label{display:block;margin-top:12px;font-weight:700}
+  select,input[type="number"],input[type="range"]{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid #dfe6fb}
+  button{margin-top:14px;padding:12px;background:linear-gradient(135deg,#667eea,#764ba2);border:0;color:#fff;border-radius:10px;font-weight:800;cursor:pointer}
+  .network-img{max-width:100%;height:auto;border-radius:10px;border:1px solid #e6eefc;margin-top:12px}
+  .links{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+  .link-card{background:#fff;border:1px solid #e6eefc;padding:10px;border-radius:10px;width:220px}
+  .ok{color:#0b6623;font-weight:700}
+  .bad{color:#8b1d1d;font-weight:700}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>BB84 Quantum Network — Visual Sender/Receiver/Attacker</h1>
+    <p style="opacity:.9">Select options then Run. Visual topology and per-link status appear to the right.</p>
+  </header>
+
+  <main>
+    <aside class="panel">
+      <label>Mode</label>
+      <select id="mode">
+        <option value="network-single">Multi-Party Network (visual)</option>
+        <option value="basic">Basic BB84 (chart)</option>
+      </select>
+
+      <label>Qubits (1–20)</label>
+      <input id="num_qubits" type="range" min="1" max="20" value="10">
+
+      <label>Attack type</label>
+      <select id="attack_type">
+        <option value="no_attack">No attack</option>
+        <option value="single_attacker_single_target">Single → Single</option>
+        <option value="single_attacker_multiple_targets">Single → Multiple</option>
+        <option value="multiple_attackers_single_targets">Multiple → Single</option>
+        <option value="multiple_attackers_multiple_targets">Multiple → Multiple</option>
+      </select>
+
+      <label>Number of attackers</label>
+      <input id="num_attackers" type="number" min="0" max="10" value="1">
+
+      <label>Intercept % (0–100)</label>
+      <input id="intercept_pct" type="range" min="0" max="100" step="5" value="50">
+
+      <button id="runBtn">🚀 Run Protocol</button>
+    </aside>
+
+    <section class="content">
+      <div id="status"></div>
+
+      <div id="visual_area">
+        <!-- dynamic: network image, charts, link cards -->
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const runBtn = document.getElementById("runBtn");
+const visualArea = document.getElementById("visual_area");
+const statusDiv = document.getElementById("status");
+
+function setStatus(msg, ok=true){
+  statusDiv.innerHTML = `<div style="padding:12px;background:${ok?'#dff7e6':'#fde6e6'};border-radius:8px;margin-bottom:12px">${msg}</div>`;
+}
+
+runBtn.addEventListener("click", async ()=>{
+  visualArea.innerHTML = "";
+  setStatus("Running simulation, please wait...", true);
+
+  const mode = document.getElementById("mode").value;
+  const num_qubits = parseInt(document.getElementById("num_qubits").value);
+  const attack_scenario = document.getElementById("attack_type").value;
+  const num_attackers = parseInt(document.getElementById("num_attackers").value) || 0;
+  const intercept_rate = parseFloat(document.getElementById("intercept_pct").value)/100.0;
+
+  try{
+    if(mode === "network-single"){
+      const res = await fetch("/api/network/single", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          num_qubits,
+          attack_scenario,
+          num_attackers,
+          intercept_rate
+        })
+      });
+      const j = await res.json();
+      if(!j.success) throw new Error("Server error");
+
+      const d = j.data;
+      setStatus(`Network simulation done — security ${d.security_percentage}%`, true);
+
+      // show network image
+      const img = document.createElement("img");
+      img.className = "network-img";
+      img.src = "data:image/png;base64," + d.network_image;
+      visualArea.appendChild(img);
+
+      // summary metrics
+      const metrics = document.createElement("div");
+      metrics.style.marginTop = "12px";
+      metrics.innerHTML = `
+        <strong>Total links:</strong> ${d.total_links} &nbsp;&nbsp;
+        <strong>Secure:</strong> ${d.secure_links} &nbsp;&nbsp;
+        <strong>Compromised:</strong> ${d.compromised_links} &nbsp;&nbsp;
+        <strong>Intercept %:</strong> ${d.intercept_rate}%
+      `;
+      visualArea.appendChild(metrics);
+
+      // link cards
+      const linksWrap = document.createElement("div");
+      linksWrap.className = "links";
+      d.link_details.forEach(ld=>{
+        const card = document.createElement("div");
+        card.className = "link-card";
+        card.innerHTML = `
+          <div><strong>Alice → ${ld.name}</strong></div>
+          <div>Attacker: ${ld.attacker ? ld.attacker : "—"}</div>
+          <div>Error: ${ld.error}%</div>
+          <div>Intercept: ${ld.intercept_rate}%</div>
+          <div style="margin-top:8px" class="${ld.secure? 'ok' : 'bad'}">${ld.secure? 'SECURE' : 'COMPROMISED'}</div>
+        `;
+        linksWrap.appendChild(card);
+      });
+      visualArea.appendChild(linksWrap);
+
+    } else {
+      // basic bb84
+      const res = await fetch("/api/bb84/basic", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ num_qubits, eve_present: true, intercept_rate })
+      });
+      const j = await res.json();
+      if(!j.success) throw new Error("Server error");
+
+      const d = j.data;
+      setStatus(`BB84 basic run — error ${d.error_percentage}%`, d.secure);
+
+      // chart image + metrics display
+      const chart = document.createElement("img");
+      chart.className = "network-img";
+      chart.src = "data:image/png;base64," + d.chart_image;
+      visualArea.appendChild(chart);
+
+      const m = document.createElement("div");
+      m.style.marginTop="12px";
+      m.innerHTML = `
+        <div><strong>Basis match:</strong> ${d.basis_match_rate}%</div>
+        <div><strong>Key length:</strong> ${d.key_length}</div>
+        <div><strong>Secure:</strong> ${d.secure}</div>
+      `;
+      visualArea.appendChild(m);
+    }
+  }catch(err){
+    setStatus("Request failed: "+err.message, false);
+  }
+});
+
+// test health on load
+fetch("/api/health").then(r=>r.json()).then(()=>setStatus("Server online",true)).catch(()=>setStatus("Backend unreachable", false));
+</script>
+</body>
+</html>
