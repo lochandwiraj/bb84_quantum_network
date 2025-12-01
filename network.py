@@ -44,7 +44,7 @@ def run_bb84_channel(n_qubits, eve_present=False, intercept_rate=0.5, eve_name="
     )
 
     # Key sifting (keep only matching bases)
-    sender_key, receiver_key = sift_keys(alice.bases, receiver_bases, alice.bits, measured_bits)
+    sender_key, receiver_key, matched_indices = sift_keys(alice.bases, receiver_bases, alice.bits, measured_bits)
     
     # Error estimation - use ALL bits for accurate error rate
     error_rate = estimate_error_rate(sender_key, receiver_key, sample_size=None)
